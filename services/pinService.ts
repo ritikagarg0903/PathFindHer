@@ -9,7 +9,7 @@ import { getDatabase, ref, push, onValue, set, query, orderByChild, equalTo, get
 // 3. Add a Web App
 // 4. Copy the config object below
 const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
+  apiKey: "YOUR_API_KEY", // Make sure this is your actual API Key
   authDomain: "walksafe-4f50f.firebaseapp.com",
   projectId: "walksafe-4f50f",
   storageBucket: "walksafe-4f50f.firebasestorage.app",
@@ -17,10 +17,11 @@ const FIREBASE_CONFIG = {
   appId: "1:261622392224:web:b9019b4664f5227ffef0c5",
   databaseURL: "https://walksafe-4f50f-default-rtdb.firebaseio.com"
 };
-  
 
 // Check if config is set
-const USE_FIREBASE = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+// You confirmed you have permissions, so we default this to TRUE.
+// Ensure FIREBASE_CONFIG above is populated correctly.
+const USE_FIREBASE = true;
 
 // --- Firebase Setup ---
 let db: any;
@@ -33,7 +34,7 @@ if (USE_FIREBASE) {
     console.warn("Firebase init failed, falling back to local storage", e);
   }
 } else {
-  console.log("Using Local Storage (Update FIREBASE_CONFIG in services/pinService.ts to use Database)");
+  console.log("Using Local Storage");
 }
 
 const STORAGE_KEY = 'safe_walk_pins_db';
@@ -113,35 +114,47 @@ export const addPin = async (pin: Omit<Pin, 'id' | 'timestamp'>): Promise<Pin> =
 
 // Remove a pin
 export const removePin = async (pinId: string): Promise<void> => {
+  console.log("SERVICE START: removePin called with ID:", pinId);
+  
   if (USE_FIREBASE && db) {
-    // Strategy 1: Attempt to delete directly by key (Correct way for new pins)
-    // Even if it doesn't exist, this operation is safe.
-    try {
-        const directRef = ref(db, `pins/${pinId}`);
-        await remove(directRef);
-    } catch (e) {
-        console.warn("Direct delete failed, trying query...", e);
-    }
-
-    // Strategy 2: Fallback query for legacy pins (where ID stored in object != Firebase Key)
-    // We do this to ensure older data can still be deleted.
+    console.log("SERVICE: Attempting Firebase deletion...");
     const pinsRef = ref(db, 'pins');
+
+    // Method 1: Robust Query (Recommended)
+    // Find the node where the child property "id" equals pinId.
     const q = query(pinsRef, orderByChild('id'), equalTo(pinId));
     
     try {
         const snapshot = await get(q);
+        
         if (snapshot.exists()) {
+            console.log("SERVICE: Pin found via query. Removing...");
             const updates: Promise<void>[] = [];
             snapshot.forEach((childSnapshot) => {
                 updates.push(remove(childSnapshot.ref));
             });
             await Promise.all(updates);
+            console.log("SERVICE: Pin removed successfully via query.");
+            return; // Exit if successful
+        } else {
+             console.log("SERVICE: Pin NOT found via query. Attempting direct path fallback...");
         }
     } catch (error) {
-        console.error("Error removing pin via query:", error);
-        throw error;
+        console.error("SERVICE ERROR: Error removing pin via query:", error);
     }
+
+    // Method 2: Direct Path Fallback
+    try {
+        const directRef = ref(db, `pins/${pinId}`);
+        await remove(directRef);
+        console.log("SERVICE: Direct path removal executed.");
+    } catch (e) {
+        console.error("SERVICE ERROR: Direct delete failed:", e);
+        throw e;
+    }
+
   } else {
+    console.log("SERVICE: Removing from Local Storage...");
     const currentPins = getLocalPinsSync();
     const updatedPins = currentPins.filter(p => p.id !== pinId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedPins));
@@ -159,9 +172,7 @@ const getLocalPinsSync = (): Pin[] => {
 
 // Seed initial data if empty
 export const seedData = (centerLat: number, centerLng: number) => {
-  // Only seed if local storage is empty and we aren't using Firebase (Firebase usually persists)
-  // Or if we are using Firebase but it's empty? 
-  // For simplicity, we only seed local storage to avoid spamming the shared DB if one is eventually set up.
+  // Only seed if local storage is empty.
   if (!USE_FIREBASE && getLocalPinsSync().length === 0) {
     const seeds: Pin[] = [
       {

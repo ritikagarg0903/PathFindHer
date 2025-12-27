@@ -21,6 +21,39 @@ const getDistanceMeters = (p1: LatLng, p2: LatLng) => {
   return R * c;
 };
 
+// Calculate bearing between two points (in degrees)
+const getBearing = (start: LatLng, end: LatLng) => {
+  const startLat = start.lat * Math.PI / 180;
+  const startLng = start.lng * Math.PI / 180;
+  const destLat = end.lat * Math.PI / 180;
+  const destLng = end.lng * Math.PI / 180;
+
+  const y = Math.sin(destLng - startLng) * Math.cos(destLat);
+  const x = Math.cos(startLat) * Math.sin(destLat) -
+            Math.sin(startLat) * Math.cos(destLat) * Math.cos(destLng - startLng);
+  const brng = Math.atan2(y, x);
+  return (brng * 180 / Math.PI + 360) % 360;
+};
+
+// Calculate a new point given start, distance and bearing
+const getDestinationPoint = (start: LatLng, distanceMeters: number, bearing: number): LatLng => {
+  const R = 6371e3; // Earth Radius
+  const angDist = distanceMeters / R;
+  const brng = bearing * Math.PI / 180;
+  const lat1 = start.lat * Math.PI / 180;
+  const lon1 = start.lng * Math.PI / 180;
+
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angDist) +
+                         Math.cos(lat1) * Math.sin(angDist) * Math.cos(brng));
+  const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(angDist) * Math.cos(lat1),
+                                 Math.cos(angDist) - Math.sin(lat1) * Math.sin(lat2));
+
+  return {
+    lat: lat2 * 180 / Math.PI,
+    lng: lon2 * 180 / Math.PI
+  };
+};
+
 const formatDuration = (seconds: number): string => {
   // Add 20% buffer for realistic walking speed (lights, crossings)
   const adjustedSeconds = seconds * 1.2;
@@ -36,18 +69,27 @@ const formatDuration = (seconds: number): string => {
 };
 
 // Check if route passes near danger pins
-const checkRouteConflicts = (routePath: LatLng[], pins: Pin[]): Pin[] => {
-  const DANGER_THRESHOLD_METERS = 80; // Distance to consider "too close"
+const checkRouteConflicts = (routePath: LatLng[], pins: Pin[], startLoc: LatLng, endLoc: LatLng): Pin[] => {
+  const DANGER_THRESHOLD_METERS = 150; // VERY WIDE berth for safety
+  const IGNORE_TERMINAL_DISTANCE = 80; // If you are within 80m of start/end, we can't avoid it.
+  
   const dangerPins = pins.filter(p => p.safetyLevel === SafetyLevel.DANGER);
   const conflicts = new Set<Pin>();
 
-  // Sample route points to avoid excessive calculation (check every 5th point)
-  for (let i = 0; i < routePath.length; i += 5) {
-    const point = routePath[i];
+  // Iterate every single point for maximum safety accuracy
+  for (const point of routePath) {
     for (const pin of dangerPins) {
-      if (getDistanceMeters(point, pin) < DANGER_THRESHOLD_METERS) {
-        conflicts.add(pin);
-      }
+        const distToPin = getDistanceMeters(point, pin);
+        
+        if (distToPin < DANGER_THRESHOLD_METERS) {
+            // Check if this "conflict" is just because we are starting/ending there
+            const distToStart = getDistanceMeters(pin, startLoc);
+            const distToEnd = getDistanceMeters(pin, endLoc);
+            
+            if (distToStart > IGNORE_TERMINAL_DISTANCE && distToEnd > IGNORE_TERMINAL_DISTANCE) {
+                conflicts.add(pin);
+            }
+        }
     }
   }
   return Array.from(conflicts);
@@ -63,13 +105,18 @@ const fetchOSRMRoute = async (start: LatLng, dest: LatLng, waypoint?: LatLng) =>
   
   url += `;${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
 
-  const response = await fetch(url);
-  const data = await response.json();
-  
-  if (!data.routes || data.routes.length === 0) {
-    return null;
+  try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (!data.routes || data.routes.length === 0) {
+        return null;
+      }
+      return data.routes[0];
+  } catch (e) {
+      console.error("OSRM Fetch Error", e);
+      return null;
   }
-  return data.routes[0];
 };
 
 // --- Main Services ---
@@ -177,70 +224,96 @@ export const searchPlaces = async (query: string, center: LatLng): Promise<Place
 export const getSafeRoute = async (start: LatLng, destinationLoc: LatLng, destinationName: string, pins: Pin[]): Promise<RouteResponse> => {
   try {
     // 1. Fetch Initial Route (Direct)
-    let routeData = await fetchOSRMRoute(start, destinationLoc);
+    const directRouteData = await fetchOSRMRoute(start, destinationLoc);
     
-    if (!routeData) {
+    if (!directRouteData) {
        throw new Error("No route found");
     }
 
-    let routeCoordinates = routeData.geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }));
-    
-    // 2. Check for Safety Conflicts
-    let conflicts = checkRouteConflicts(routeCoordinates, pins);
-    let detourTaken = false;
+    const directCoordinates = directRouteData.geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }));
+    const directConflicts = checkRouteConflicts(directCoordinates, pins, start, destinationLoc);
 
-    // 3. Attempt Detour if Conflicts Exist
-    if (conflicts.length > 0) {
-      const conflictPin = conflicts[0]; // Handle the first major conflict
-      
-      // Calculate a detour point:
-      // We want a point perpendicular to the path start->end, offset by some distance.
-      // Simple Heuristic: Shift the conflict pin's location by ~0.003 degrees (approx 300m) 
-      // in a direction that might clear the area.
-      
-      // Offset logic: try to move North-East or South-West away from the pin
-      // This is a rough heuristic for "going around the block"
-      const detourLat = conflictPin.lat + (start.lat < destinationLoc.lat ? 0.003 : -0.003);
-      const detourLng = conflictPin.lng + (start.lng < destinationLoc.lng ? -0.003 : 0.003);
-      
-      const detourPoint = { lat: detourLat, lng: detourLng };
+    // Initial Selection
+    let selectedRoute = {
+      coords: directCoordinates,
+      data: directRouteData,
+      conflicts: directConflicts,
+      type: 'direct',
+      // SCORING: 1,000,000 penalty per conflict.
+      // This ensures even a 10 hour walk (36,000s) is preferred over 1 conflict.
+      score: directConflicts.length * 1000000 + directRouteData.duration 
+    };
 
-      // Fetch Alternate Route
-      const altRouteData = await fetchOSRMRoute(start, destinationLoc, detourPoint);
+    // 2. If Direct Route is unsafe, attempt AGGRESSIVE multi-path calculations
+    if (directConflicts.length > 0) {
+      const conflictPin = directConflicts[0]; // Avoid the first danger zone we hit
+      const bearing = getBearing(start, destinationLoc);
       
-      if (altRouteData) {
-        const altCoordinates = altRouteData.geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }));
-        const altConflicts = checkRouteConflicts(altCoordinates, pins);
-        
-        // If alternate route has fewer conflicts, use it
-        if (altConflicts.length < conflicts.length) {
-           routeData = altRouteData;
-           routeCoordinates = altCoordinates;
-           conflicts = altConflicts;
-           detourTaken = true;
-        }
+      // Try wide range of offsets: 300m, 600m, 1000m, 1500m
+      // Large offsets (1km+) force the router to use completely different main roads
+      const offsets = [300, 600, 1000, 1500]; 
+      
+      // Generate promises for all candidates
+      const routePromises = [];
+      
+      for (const offset of offsets) {
+          // Left Waypoint (-90 degrees)
+          const leftWp = getDestinationPoint(conflictPin, offset, bearing - 90);
+          routePromises.push(fetchOSRMRoute(start, destinationLoc, leftWp).then(data => ({ data, type: `left-${offset}` })));
+          
+          // Right Waypoint (+90 degrees)
+          const rightWp = getDestinationPoint(conflictPin, offset, bearing + 90);
+          routePromises.push(fetchOSRMRoute(start, destinationLoc, rightWp).then(data => ({ data, type: `right-${offset}` })));
       }
+
+      const results = await Promise.all(routePromises);
+
+      // Evaluation Helper
+      const evaluate = (data: any, type: string) => {
+        if (!data) return null;
+        const coords = data.geometry.coordinates.map((c: number[]) => ({ lat: c[1], lng: c[0] }));
+        const conflicts = checkRouteConflicts(coords, pins, start, destinationLoc);
+        
+        // Massive Penalty for conflicts
+        const score = (conflicts.length * 1000000) + data.duration;
+        return { coords, data, conflicts, type, score };
+      };
+
+      const candidates = [selectedRoute];
+      
+      results.forEach(res => {
+          if (res.data) {
+              const evalResult = evaluate(res.data, res.type);
+              if (evalResult) candidates.push(evalResult);
+          }
+      });
+
+      // Sort by score (ascending) -> Best route first
+      candidates.sort((a, b) => a.score - b.score);
+      
+      // Select the winner
+      selectedRoute = candidates[0];
     }
 
     // 4. Final Route Processing
-    const duration = formatDuration(routeData.duration);
+    const duration = formatDuration(selectedRoute.data.duration);
+    const dangerCount = selectedRoute.conflicts.length;
+    const isDetour = selectedRoute.type !== 'direct';
     
     // 5. Generate Safety Note with Gemini
-    // We inform Gemini if we took a detour or if dangers still exist.
-    const dangerCount = conflicts.length;
-    
     const prompt = `
       I am walking from coordinates (${start.lat}, ${start.lng}) to "${destinationName}".
       The calculated walk time is ${duration}.
       
       Context:
-      - Detour taken to avoid danger: ${detourTaken ? "YES" : "NO"}
-      - Remaining danger zones on this specific path: ${dangerCount}
+      - Detour Logic Used: ${isDetour ? "YES (Avoided danger zone)" : "NO (Direct path)"}
+      - Remaining danger zones on chosen path: ${dangerCount}
       
+      Task:
       Provide a concise "Safety Note" (max 1 sentence).
-      If a detour was taken, mention that the route was adjusted for safety.
-      If danger zones remain, warn the user specifically.
-      Otherwise, give general advice.
+      - If a detour was applied successfully, tell the user the route was adjusted for safety.
+      - If danger zones remain, give a STRICT warning.
+      - If direct route is clear, be reassuring.
       
       Return JSON: { "safetyNote": "..." }
     `;
@@ -261,13 +334,13 @@ export const getSafeRoute = async (start: LatLng, destinationLoc: LatLng, destin
         } catch (e) { /* ignore */ }
     }
 
-    // Fallback if AI fails but we know we have conflicts
+    // Fallback if AI fails
     if (dangerCount > 0 && safetyNote === "Stay aware of your surroundings.") {
-        safetyNote = "Warning: This route passes near reported danger zones. Please exercise extreme caution.";
+        safetyNote = "Warning: Safe path not possible. This route still passes near reported danger zones.";
     }
 
     return {
-      route: routeCoordinates,
+      route: selectedRoute.coords,
       duration,
       safetyNote
     };

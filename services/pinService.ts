@@ -13,8 +13,8 @@ const FIREBASE_CONFIG = {
   authDomain: "walksafe-4f50f.firebaseapp.com",
   projectId: "walksafe-4f50f",
   storageBucket: "walksafe-4f50f.firebasestorage.app",
-  messagingSenderId: "NA",
-  appId: "NA",
+  messagingSenderId: "261622392224",
+  appId: "1:261622392224:web:b9019b4664f5227ffef0c5",
   databaseURL: "https://walksafe-4f50f-default-rtdb.firebaseio.com"
 };
   

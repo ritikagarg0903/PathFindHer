@@ -39,3 +39,6 @@ Navigating urban environments, especially at night, presents unique safety chall
     *   `API_KEY`: Your Google Gemini API Key.
 4.  (Optional) Configure Firebase in `services/pinService.ts` for persistent community data.
 5.  Run the app: `npm run dev`
+
+## Disclaimer
+This code was generated using Google AI Studio.

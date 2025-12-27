@@ -1,0 +1,7 @@
+{
+  "name": "PathFindHer: Walk Without Fear",
+  "description": "A community-driven safety mapping tool where users rate street safety and use AI to analyze areas.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

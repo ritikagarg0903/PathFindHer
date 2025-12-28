@@ -1,26 +1,48 @@
-## PathFindHer: Walk Without Fear 🛡️
+<div align="center">
+  <img src="PFH_logo.png" alt="PathFindHer Logo" width="200" />
+</div>
 
-**PathFindHer** is a navigation tool built on a "Women Safety First" philosophy, replacing the "fastest route" with the "safest route." By combining crowdsourced community vigilance with advanced AI grounding, we empower women to reclaim their cities and navigate urban environments with confidence.
+# PathFindHer: Walk Without Fear 🛡️
 
-### 🚨 The Problem
+## The Problem
+Navigating urban environments, especially at night, presents unique safety challenges—particularly for women. Standard navigation apps prioritize speed and efficiency, often directing pedestrians through poorly lit alleys, construction zones, or isolated areas without considering personal security. There is a critical lack of real-time, community-driven data regarding street-level safety, lighting conditions, and potential harassment hotspots.
 
-For many women, navigating a city (especially at night) is an exercise in risk assessment. Standard navigation apps prioritize speed, often directing pedestrians through poorly lit alleys, isolated parks, or construction zones. There is a critical lack of real-time, street-level data regarding lighting conditions, harassment hotspots, and active safety. Current tools tell you *where* to go, but they don't tell you *how safe* it is to get there.
+## The Solution
+**PathFindHer** is a navigation tool built on a **"Women Safety First"** philosophy. It empowers users to reclaim their city by crowdsourcing safety data and providing immediate situational awareness. By combining community vigilance with advanced AI, the app prioritizes well-lit, populated, and verified safe paths over the fastest ones.
 
-### 💡 The Solution
+## Key Features
 
-PathFindHer bridges the gap between navigation and personal security. It is a community-driven platform where users contribute real-time safety data. By integrating Gemini 2.5 Flash, the app doesn't just show a map; it "understands" the environment. It verifies safe havens, analyzes neighborhood composition, and calculates detours that avoid user-reported danger zones, ensuring that peace of mind is the top priority.
+### 📍 Community Safety Mapping
+*   **Drop Pins**: Users can tag locations as **Safe**, **Caution**, or **Danger**.
+*   **Real-time Context**: Add descriptions specifically helpful for women's safety, such as "Streetlights broken," "Isolated area," or "Well-lit with security."
+*   **Visual Indicators**: Color-coded markers allow for instant assessment of an area's safety profile before entering it.
 
-### ✨ Key Features
+### 🤖 AI Safety Advisor (Powered by Gemini)
+*   **"Scan Area Safety"**: One-click AI analysis of the user's immediate surroundings.
+*   **Verified Safe Havens**: Uses Gemini 2.5 Flash with Google Maps Grounding to strictly verify and list nearby **Police Stations**, **Hospitals**, **Transit Stations**, and **24/7 Businesses** where one can seek help.
+*   **Contextual Summaries**: Provides a brief text summary of the area's composition (residential vs. industrial) and specific safety tips.
 
-* **📍 Community Safety Mapping:** Users drop color-coded pins (Safe, Caution, Danger) to report broken streetlights, isolated areas, or well-lit zones.
-* **🤖 AI Safety Advisor:** Powered by Gemini 2.5 Flash with Google Maps Grounding, this feature scans the user’s immediate area to identify and verify 24/7 "Safe Havens" like hospitals and police stations.
-* **🧭 Safe Routing:** An intelligent navigation algorithm that suggests paths based on community ratings, actively offering detours to avoid high-risk markers.
-* **📱 Instant Context:** AI-generated summaries of your route’s safety profile, providing tips based on whether an area is residential, industrial, or high-traffic.
+### 🧭 Safe Routing
+*   **Intelligent Navigation**: Calculates walking directions that actively check against the community-reported "Danger" zones.
+*   **Detour Logic**: If a direct route passes too close to a reported hazard, the algorithm attempts to calculate a detour to keep the user safe.
+*   **Safety Notes**: The AI reviews the route summary to provide a final confidence check or warning before the user starts walking.
 
-### 🛠️ Tech Stack
+## Tech Stack
 
-* **Frontend:** React (TypeScript) & Tailwind CSS for a responsive, mobile-first UI.
-* **Mapping:** Leaflet.js and Google Maps API for interactive spatial data.
-* **AI Engine:** Google Gemini API (Model: `gemini-2.5-flash`) for environmental analysis.
-* **AI Grounding:** Google Maps Grounding Tool to ensure safe haven data is factually accurate.
-* **Database:** Firebase Realtime Database for instantaneous community pin updates.
+*   **Frontend**: React (TypeScript), Tailwind CSS
+*   **Maps**: Leaflet.js, Google Maps
+*   **AI & Data**: Google Gemini API (Model: `gemini-2.5-flash`), Google Maps Grounding Tool
+*   **Backend / Database**: Firebase Realtime Database (for storing community pins)
+*   **Icons**: Lucide React
+
+## Setup
+
+1.  Clone the repository.
+2.  Install dependencies: `npm install`
+3.  Set up environment variables:
+    *   `API_KEY`: Your Google Gemini API Key.
+4.  (Optional) Configure Firebase in `services/pinService.ts` for persistent community data.
+5.  Run the app: `npm run dev`
+
+## Disclaimer
+This code was generated using Google AI Studio.

@@ -121,22 +121,18 @@ function App() {
     setMode('MENU');
   };
 
-  const handleDeletePin = async (e: React.MouseEvent, pinId: string) => {
-    e.stopPropagation();
-    console.log("Button clicked. Requesting delete for pin:", pinId);
-
-    // Removed confirmation check
-    console.log("Proceeding with deletion...");
-    setIsDeleting(true);
-    try {
-        await removePin(pinId);
-        console.log("Pin deleted successfully.");
-        setSelectedPin(null);
-    } catch (err) {
-        console.error("Delete failed:", err);
-        alert("Failed to delete pin. Please try again.");
-    } finally {
-        setIsDeleting(false);
+  const handleDeletePin = async (pinId: string) => {
+    if (confirm("Are you sure you want to delete this report?")) {
+        setIsDeleting(true);
+        try {
+            await removePin(pinId);
+            setSelectedPin(null);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to delete pin. Please try again.");
+        } finally {
+            setIsDeleting(false);
+        }
     }
   };
 
@@ -407,7 +403,7 @@ function App() {
                     <div className="flex justify-between items-center mt-4">
                         <p className="text-gray-500 text-xs">Reported {new Date(selectedPin.timestamp).toLocaleDateString()}</p>
                         <button 
-                            onClick={(e) => handleDeletePin(e, selectedPin.id)}
+                            onClick={() => handleDeletePin(selectedPin.id)}
                             disabled={isDeleting}
                             className="flex items-center gap-1 text-red-400 hover:text-red-300 text-xs font-medium px-2 py-1 rounded-lg hover:bg-red-900/20 transition-colors disabled:opacity-50"
                         >

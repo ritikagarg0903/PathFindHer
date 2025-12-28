@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="PFH_logo.png" alt="PathFindHer Logo" width="200" />
+  <img src="PathFindHer_logo.png" alt="PathFindHer Logo" width="200" />
 </div>
 
 # PathFindHer: Walk Without Fear 🛡️
